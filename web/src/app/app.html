@@ -1,0 +1,121 @@
+<header>
+  <h1>BookFinder</h1>
+  <p class="tag">Recommendations from your taste · free downloads from legal sources</p>
+  <nav>
+    @for (t of [['taste','Your taste'],['recs','Recommendations'],['find','Find & download'],['library','Library']]; track t[0]) {
+      <button [class.active]="tab() === t[0]" (click)="show($any(t[0]))">{{ t[1] }}
+        @if (t[0] === 'library' && library().length) { <span class="badge">{{ library().length }}</span> }
+      </button>
+    }
+  </nav>
+</header>
+
+<main>
+  @if (busy()) { <div class="status busy"><span class="spinner"></span>{{ busy() }}…</div> }
+  @if (error()) { <div class="status error" (click)="error.set(null)">{{ error() }}</div> }
+  @if (notice()) { <div class="status ok" (click)="notice.set(null)">{{ notice() }}</div> }
+
+  @switch (tab()) {
+    @case ('taste') {
+      <section class="grid">
+        <div class="card">
+          <h2>Books you loved</h2>
+          <form (ngSubmit)="likeBook()">
+            <input name="book" [(ngModel)]="bookInput" placeholder="e.g. The Name of the Wind" />
+            <button type="submit" [disabled]="!!busy()">Add</button>
+          </form>
+          <ul class="list">
+            @for (b of prefs()?.likedBooks ?? []; track b.key) {
+              <li><span><strong>{{ b.title }}</strong>&nbsp;<small>{{ b.author }}</small></span>
+                <button class="x" (click)="unlikeBook(b.key)" aria-label="Remove">×</button></li>
+            } @empty { <li class="muted">Add 3–5 books you loved. Their subjects drive your recommendations.</li> }
+          </ul>
+        </div>
+
+        <div class="card">
+          <h2>Favourite authors</h2>
+          <form (ngSubmit)="add('authors', 'authorInput')">
+            <input name="author" [(ngModel)]="authorInput" placeholder="e.g. Ursula K. Le Guin" />
+            <button type="submit" [disabled]="!!busy()">Add</button>
+          </form>
+          <div class="chips">
+            @for (a of prefs()?.authors ?? []; track a) { <span class="chip">{{ a }} <button (click)="remove('authors', a)">×</button></span> }
+          </div>
+
+          <h2>Subjects &amp; genres</h2>
+          <form (ngSubmit)="add('subjects', 'subjectInput')">
+            <input name="subject" [(ngModel)]="subjectInput" placeholder="e.g. time travel, stoicism" />
+            <button type="submit" [disabled]="!!busy()">Add</button>
+          </form>
+          <div class="chips">
+            @for (s of prefs()?.subjects ?? []; track s) { <span class="chip">{{ s }} <button (click)="remove('subjects', s)">×</button></span> }
+          </div>
+        </div>
+      </section>
+      @if (hasTaste()) { <button class="primary" (click)="show('recs')">See recommendations →</button> }
+    }
+
+    @case ('recs') {
+      <div class="row"><h2>Recommended for you</h2><button (click)="loadRecs()" [disabled]="!!busy()">Refresh</button></div>
+      @if (!hasTaste()) { <p class="muted">Add some books, authors or subjects under “Your taste” first.</p> }
+      <div class="recs">
+        @for (r of recs() ?? []; track r.key) {
+          <article class="rec">
+            @if (r.coverUrl) { <img [src]="r.coverUrl" [alt]="r.title" loading="lazy" /> } @else { <div class="nocover">{{ r.title[0] }}</div> }
+            <div class="body">
+              <h3>{{ r.title }}</h3>
+              <p class="by">{{ r.authors || 'Unknown author' }}@if (r.year) { · {{ r.year }} }</p>
+              @if (r.freePublicDomain) { <span class="free">Free · public domain</span> }
+              <p class="why">Because: {{ r.reasons.join('; ') }}</p>
+              <div class="actions">
+                <button (click)="lookFor(r)">Find free copy</button>
+                <a [href]="'https://openlibrary.org' + r.key" target="_blank" rel="noopener">Details</a>
+                <button class="link" (click)="dismiss(r)">Not interested</button>
+              </div>
+            </div>
+          </article>
+        } @empty { @if (recs() && !busy()) { <p class="muted">No matches yet. Add more books or subjects you like.</p> } }
+      </div>
+    }
+
+    @case ('find') {
+      <form class="card search" (ngSubmit)="find()">
+        <input name="t" [(ngModel)]="findTitle" placeholder="Title" />
+        <input name="a" [(ngModel)]="findAuthor" placeholder="Author (optional)" />
+        <button type="submit" class="primary" [disabled]="!!busy()">Search free sources</button>
+      </form>
+      <p class="muted small">Searches Project Gutenberg and Internet Archive public-domain scans.</p>
+
+      @if (found(); as f) {
+        @for (c of f.copies; track $index) {
+          <div class="card copy">
+            <div><strong>{{ c.title }}</strong>&nbsp;<small>{{ c.author }}</small><br /><span class="src">{{ c.source }}</span></div>
+            <div class="actions">
+              @for (l of formats(c.links); track l[0]) {
+                <button (click)="download(l[1], c.title, l[0])" [disabled]="!!busy()">Download {{ l[0].toUpperCase() }}</button>
+              }
+            </div>
+          </div>
+        } @empty {
+          <div class="card">
+            <p><strong>No free legal copy of “{{ foundFor() }}”.</strong> It's probably still under copyright.</p>
+            @if (f.borrowUrl) {
+              <p><a [href]="f.borrowUrl" target="_blank" rel="noopener">Borrow it free on Open Library →</a> (free account)</p>
+            }
+            <p class="muted">Also try your public library card with Libby/OverDrive or Hoopla. Both are free.</p>
+          </div>
+        }
+      }
+    }
+
+    @case ('library') {
+      <h2>Your library</h2>
+      <ul class="list card">
+        @for (i of library(); track i.fileName) {
+          <li><span>{{ i.fileName }} <small>{{ size(i.sizeBytes) }}</small></span>
+            <a [href]="api.fileUrl(i.fileName)" download>Open</a></li>
+        } @empty { <li class="muted">Nothing downloaded yet.</li> }
+      </ul>
+    }
+  }
+</main>
